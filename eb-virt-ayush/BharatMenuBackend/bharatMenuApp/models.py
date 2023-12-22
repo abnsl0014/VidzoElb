@@ -5,8 +5,10 @@ from django.core.validators import *
 from phonenumber_field.formfields import PhoneNumberField
 from django.contrib.auth.models import User
 from django.conf import settings
+import tempfile
+from django.core.files import File
 import datetime
-
+from gtts import gTTS
 # Create your models here.
 
 
@@ -151,6 +153,9 @@ class Query(models.Model):
 
     VideoAd = models.FileField(upload_to='videos_uploaded', null=True, blank=True,
                                validators=[FileExtensionValidator(allowed_extensions=['MOV', 'avi', 'mp4', 'webm', 'mkv'])])
+    AudioFile = models.FileField(upload_to='audios_uploaded/', null=True, blank=True)
+
+    Image = models.ImageField(default='happy.png', blank=True)
 
     TextAd = models.CharField(max_length=5000, default="", blank=True)
 
@@ -174,6 +179,16 @@ class Query(models.Model):
 
     def __int__(self):
         return self.QueryId
+        
+    # def save(self, *args, **kwargs):
+    #     audio = gTTS(text=self.query, lang='en', slow=True)
+
+    #     with tempfile.TemporaryFile(mode='rb+') as f:
+    #         audio.write_to_fp(f)
+    #         file_name = '{}.mp3'.format(self.query)
+    #         self.AudioFile.save(file_name, File(file=f))
+
+    #     super(Query, self).save(*args, **kwargs)
 
 
 # class VideoAd(models.Model):
@@ -252,3 +267,12 @@ class Merchant(models.Model):
 
     def __str__(self):
         return self.ShopName
+
+class Reminder(models.Model):
+    id = models.AutoField(primary_key=True)
+    phone_number = models.CharField(max_length=15)
+    message = models.TextField(default="")
+    reminder_time = models.DateTimeField(default=None)
+
+    def __int__(self):
+        return self.id

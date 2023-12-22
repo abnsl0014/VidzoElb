@@ -13,6 +13,8 @@ https://docs.djangoproject.com/en/4.1/ref/settings/
 from pathlib import Path
 import os
 from BharatMenuBackend.local_settings import OPENAI_API_KEY, OTP_API_KEY
+from kombu.utils.url import safequote
+import requests
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -45,7 +47,16 @@ SECRET_KEY = 'django-insecure-vorlxbb=kyh!fn6cvat=_2&nl3rkoqn)2q=l+gme75e&o&l&@$
 DEBUG = True
 
 ALLOWED_HOSTS = [
-    'django-bharatmenuapp.eba-qq64mtbt.us-west-2.elasticbeanstalk.com', '127.0.0.1', 'bharatmenu.com', 'backend.bharatmenu.com', '1.0.0.127.in-addr.arpa', 'localhost:19006', 'localhost:19003', '10.0.2.2']
+    'django-bharatmenuapp.eba-qq64mtbt.us-west-2.elasticbeanstalk.com', '127.0.0.1', 'bharatmenu.com', 'backend.bharatmenu.com', '1.0.0.127.in-addr.arpa', 'localhost:19006', 'localhost:19003', '10.0.2.2', '127.0.0.1:8000', '44.236.186.114']
+
+
+try:
+    internal_ip = requests.get('http://169.254.169.254/latest/meta-data/').text
+except requests.exceptions.ConnectionError:
+    pass
+else:
+    ALLOWED_HOSTS.append(internal_ip)
+del requests
 
 
 # Application definition
@@ -177,6 +188,42 @@ if 'AWS_STORAGE_BUCKET_NAME' in os.environ:
 
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/4.1/howto/static-files/
+
+CELERY_accept_content = ['application/json'] 
+CELERY_task_serializer = 'json' 
+
+# your_project/settings.py
+# CELERY_BROKER_URL = 'redis://127.0.0.1:6379/0'
+
+# your_project/settings.py
+# CELERY_RESULT_BACKEND = 'redis://127.0.0.1:6379/0'
+
+CELERY_TASK_DEFAULT_QUEUE = 'Reminders' 
+CELERY_BROKER_URL = "sqs://" + os.environ['AWS_ACCESS_KEY_ID'] + ":" + os.environ['AWS_SECRET_ACCESS_KEY'] + "@"
+CELERY_BROKER_TRANSPORT_OPTIONS = { 
+    "region": "us-west-2", 
+    'predefined_queues': {
+        'Reminders': {
+            'url': 'https://sqs.us-west-2.amazonaws.com/072650463999/Reminders',
+            'access_key_id': os.environ['AWS_ACCESS_KEY_ID'],
+            'secret_access_key': os.environ['AWS_SECRET_ACCESS_KEY'],
+        }
+    }
+} 
+CELERY_RESULT_BACKEND = None
+
+# if 'AWS_STORAGE_BUCKET_NAME' in os.environ:
+
+#     aws_access_key = safequote(os.environ['AWS_ACCESS_KEY_ID'])
+#     aws_secret_key = safequote(os.environ['AWS_SECRET_ACCESS_KEY'])
+
+#     CELERY_BROKER_URL = "sqs://{aws_access_key}:{aws_secret_key}@".format(
+#         aws_access_key=aws_access_key, aws_secret_key=aws_secret_key,
+#     )
+
+    # CELERY_BROKER_URL += "https://sqs.us-west-2.amazonaws.com/072650463999/Reminders"
+
+# CELERY_RESULT_BACKEND = 'db+postgresql://bharatmenu:zapoff@2023@awseb-e-gjfrxkzqqx-stack-awsebrdsdatabase-na1ycvrfziby.ceuqnsrqx4p7.us-west-2.rds.amazonaws.com:5432/ebdb'
 
 STATIC_URL = 'static/'
 STATIC_ROOT = 'static'

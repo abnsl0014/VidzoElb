@@ -1,0 +1,2 @@
+web: gunicorn --bind 127.0.0.1:8000 --workers=1 --threads=15 BharatMenuBackend.wsgi:application
+celery_worker: celery -A BharatMenuBackend.celery worker -l INFO -P solo

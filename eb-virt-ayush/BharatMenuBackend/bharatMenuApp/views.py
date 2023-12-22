@@ -1,13 +1,18 @@
 # from msilib.schema import AdminExecuteSequence
+import django
+django.setup()
 import json
+import io
+import os
 import openai
 import requests
 from django.http import HttpResponse
 from django.core.files.storage import default_storage
-from bharatMenuApp.serializers import CitySerializer, RestaurantSerializer, MenuItemSerializer, CategorySerializer, OrderSerializer, OrderItemsSerializer, RegisterSerializer, MerchantSerializer, ProfileSerializer, QuerySerializer, QuerySerializerReadOnly
+from bharatMenuApp.serializers import CitySerializer, RestaurantSerializer, MenuItemSerializer, CategorySerializer, OrderSerializer, OrderItemsSerializer, RegisterSerializer, MerchantSerializer, ProfileSerializer, QuerySerializer, QuerySerializerReadOnly, ReminderSerializer
 from bharatMenuApp.models import City, Restaurant, MenuItem, Category, Order, OrderItems, Merchant, Profile, Query
 from unicodedata import category
 from django import forms
+from django import db
 from django.shortcuts import render
 from django.views.decorators.csrf import csrf_exempt
 # from django.views.decorators import api_view
@@ -23,6 +28,13 @@ from knox.views import LoginView as KnoxLoginView
 from BharatMenuBackend.settings import OPENAI_API, OTP_API
 from django.http.response import JsonResponse
 from rest_framework.authtoken.models import Token
+from gtts import gTTS
+from django.core.files.base import ContentFile
+import replicate
+from multiprocessing import Process
+from twilio.rest import Client
+from .tasks import send_reminder
+
 
 
 # Create your views here.
@@ -165,6 +177,41 @@ def verify_otp(request):
 
             print(profile_instance)
         return JsonResponse(api_call, safe=False)
+    
+
+@csrf_exempt
+@api_view(('POST', 'GET',))
+def make_call(request):
+
+    if request.method == 'GET':
+        account_sid = "AC1027c48a892cea337d9d28fae752a186"
+        auth_token = "03d71a3f77be3664944155617656b233"
+        client = Client(account_sid, auth_token)
+        call = client.calls.create(
+                                url='http://demo.twilio.com/docs/voice.xml',
+                                to='+919023389953',
+                                from_='+14152879886'
+                            )
+        print(call.sid)
+        return JsonResponse(call.sid, safe=False)
+    
+
+    if request.method == 'POST':
+        # Assuming you receive timestamp and message in the request data
+        reminder_data = JSONParser().parse(request)
+    
+        reminder_serializer = ReminderSerializer(data=reminder_data)
+
+        print(reminder_data)
+
+
+        if reminder_serializer.is_valid():
+            reminder = reminder_serializer.save()
+            # Schedule the reminder immediately
+            send_reminder.apply_async(args=[reminder.id], eta=reminder.reminder_time)
+            return Response({'success': 'Reminder scheduled successfully'})
+        else:
+            return Response({'fail': 'Reminder scheduled failed'})
 
 
 @csrf_exempt
@@ -358,7 +405,7 @@ def ad_request(request, id=0):
             return JsonResponse(query_serializer.data, safe=False)
         except:
             return JsonResponse("Phone not exist on DB.", safe=False)
-
+    #only phone is mandatory field
     elif request.method == 'POST':
         query_data = JSONParser().parse(request)
         # profile = Profile.objects.get(phoneNumber=query_data['phone'])
@@ -661,6 +708,117 @@ def getAdImage(request, id=0):
 
         # merchant_data = request
 
+
+def ReplicateVideo(id):
+    query = Query.objects.get(QueryId=id)
+    # output = replicate.run(
+    #     "cjwbw/sadtalker:3aa3dac9353cc4d6bd62a8f95957bd844003b401ca4e4a9b33baa574c549d376",
+    #     input={
+    #         "still": True,
+    #         "enhancer": "gfpgan",
+    #         "preprocess": "crop",
+    #         "driven_audio": query.AudioFile.url,
+    #         "source_image": query.Image.url
+    #     }
+    # )
+    output = "https://replicate.delivery/pbxt/oYxiMuenVfsJV0278l5k53xJmrSLSZfwvzd2SfBNJOr15DwHB/out.mp4"
+    print(output)
+
+    response = requests.get(output)
+
+    print(response)
+
+    if response.status_code == 200:
+        # Save the video content to the model
+        query.VideoAd.save(f'{query.QueryId}_video.mp4', ContentFile(response.content))    
+
+
+@csrf_exempt
+def getAvatarVideo(request, id=0):
+
+    if request.method == 'GET':
+        if id != 0:
+            queries = Query.objects.filter(QueryId=id)
+            query_serializer = QuerySerializerReadOnly(queries, many=True)
+            return JsonResponse(query_serializer.data, safe=False)
+        else:
+            return JsonResponse("Failed", safe=False)
+        
+
+    if request.method == 'POST':
+        query_data = JSONParser().parse(request)
+        query_serializer = QuerySerializer(data=query_data)
+        if query_serializer.is_valid():
+            query = query_serializer.save()
+            text_to_convert = query.TextAd
+            if text_to_convert != "":
+
+                # generate audio
+
+                tts = gTTS(text=text_to_convert, lang='en', slow=False)
+                audio_content_io = io.BytesIO()
+                tts.write_to_fp(audio_content_io)
+                query.AudioFile.save(f'{query.QueryId}_output.mp3', ContentFile(audio_content_io.getvalue()))
+                audio_content_io.close()
+
+                #generate video
+
+                REPLICATE_API_TOKEN="r8_cPOPQV3iVxK3H8twxhWCrLfbkdXzhi23uR44s"
+
+                # replicate = replicate.Client(api_token=REPLICATE_API_TOKEN)
+
+                os.environ["REPLICATE_API_TOKEN"] = REPLICATE_API_TOKEN
+
+                print(query.AudioFile.url)
+                print(query.Image.url)
+
+                db.connections.close_all()
+
+                p = Process(target=ReplicateVideo, args=(query.QueryId,))
+                p.start()
+                
+                # output = replicate.run(
+                #     "cjwbw/sadtalker:3aa3dac9353cc4d6bd62a8f95957bd844003b401ca4e4a9b33baa574c549d376",
+                #     input={
+                #         "still": True,
+                #         "enhancer": "gfpgan",
+                #         "preprocess": "crop",
+                #         "driven_audio": query.AudioFile.url,
+                #         "source_image": query.Image.url
+                #     }
+                # )
+                # print(output)
+
+                # output = "http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/SubaruOutbackOnStreetAndDirt.mp4"
+                # print(output)
+
+                # response = requests.get(output)
+
+                # print(response)
+
+                # if response.status_code == 200:
+                #     # Save the video content to the model
+                #     query.VideoAd.save(f'{query.QueryId}_video.mp4', ContentFile(response.content))
+                # else:
+                #     return JsonResponse({"message": f"Failed to download video. Status code: {response.status_code}"}, safe=False)
+            return JsonResponse("message Video downloaded and saved successfully!", safe=False)
+        return JsonResponse("Failed to Update.", safe=False)
+
+    if request.method == 'PUT':
+        query_data = JSONParser().parse(request)
+        query = Query.objects.get(QueryId=query_data['QueryId'])
+        query_serializer = QuerySerializerReadOnly(query, data=query_data)
+        if query_serializer.is_valid():
+            query_serializer.save()
+            # text_to_convert = query.TextAd
+            # tts = gTTS(text=text_to_convert, lang='en', slow=False)
+            # audio_content_io = io.BytesIO()
+            # tts.write_to_fp(audio_content_io)
+            # query.AudioFile.save(f'{query.QueryId}_output.mp3', ContentFile(audio_content_io.getvalue()))
+            # audio_content_io.close()
+            return JsonResponse("Updated Successfully!!", safe=False)
+        return JsonResponse("Failed to Update.", safe=False)
+        
 
 @csrf_exempt
 def searchApi(request, id=0):

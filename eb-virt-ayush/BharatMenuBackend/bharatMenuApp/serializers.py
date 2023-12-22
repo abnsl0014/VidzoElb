@@ -1,14 +1,33 @@
 from django.http import HttpResponse
 from rest_framework import serializers
 # from django.core import serializers as core_serializers
-from bharatMenuApp.models import City, Restaurant, MenuItem, Category, Order, OrderItems, Merchant, Profile, Query
+from bharatMenuApp.models import City, Restaurant, MenuItem, Category, Order, OrderItems, Merchant, Profile, Query, Reminder
 from django.contrib.auth.models import User
+from datetime import datetime
 
 
 class CitySerializer(serializers.ModelSerializer):
     class Meta:
         model = City
         fields = '__all__'
+
+class ReminderSerializer(serializers.Serializer):
+    phone_number = serializers.CharField(max_length=15)
+    message = serializers.CharField()
+    reminder_time = serializers.DateTimeField()
+
+    def to_representation(self, instance):
+        ret = super().to_representation(instance)
+        # Parse the reminder_time field and include it in the serialized data
+        reminder_time_str = ret.get('reminder_time')
+        if reminder_time_str:
+            reminder_time = datetime.strptime(reminder_time_str, '%Y-%m-%dT%H:%M:%S%z')
+            ret['reminder_time'] = reminder_time.strftime('%Y-%m-%dT%H:%M:%S.%fZ')
+        return ret
+    
+    def create(self, validated_data):
+        # Implement the logic to create a Reminder instance using the validated data
+        return Reminder.objects.create(**validated_data)
 
 
 class RestaurantSerializer(serializers.ModelSerializer):
