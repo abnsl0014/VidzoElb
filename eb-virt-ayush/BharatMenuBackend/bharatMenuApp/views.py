@@ -8,8 +8,8 @@ import openai
 import requests
 from django.http import HttpResponse
 from django.core.files.storage import default_storage
-from bharatMenuApp.serializers import CitySerializer, RestaurantSerializer, MenuItemSerializer, CategorySerializer, OrderSerializer, OrderItemsSerializer, RegisterSerializer, MerchantSerializer, ProfileSerializer, QuerySerializer, QuerySerializerReadOnly, ReminderSerializer
-from bharatMenuApp.models import City, Restaurant, MenuItem, Category, Order, OrderItems, Merchant, Profile, Query
+from bharatMenuApp.serializers import CitySerializer, RestaurantSerializer, MenuItemSerializer, CategorySerializer, OrderSerializer, OrderItemsSerializer, RegisterSerializer, MerchantSerializer, ProfileSerializer, QuerySerializer, QuerySerializerReadOnly, ReminderSerializer, TaskSerializer
+from bharatMenuApp.models import City, Restaurant, MenuItem, Category, Order, OrderItems, Merchant, Profile, Query, Reminder, Task
 from unicodedata import category
 from django import forms
 from django import db
@@ -17,6 +17,7 @@ from django.shortcuts import render
 from django.views.decorators.csrf import csrf_exempt
 # from django.views.decorators import api_view
 from rest_framework.decorators import api_view
+from rest_framework.decorators import permission_classes
 from rest_framework.authentication import get_authorization_header
 from rest_framework.parsers import JSONParser
 from rest_framework import generics, permissions
@@ -34,6 +35,24 @@ import replicate
 from multiprocessing import Process
 from twilio.rest import Client
 from .tasks import send_reminder
+from twilio.twiml.voice_response import VoiceResponse, Gather
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.views import exception_handler
+from functools import wraps
+import jwt
+from rest_framework.permissions import AllowAny
+from authlib.integrations.django_oauth2 import ResourceProtector
+from . import utils
+
+AUTH0_DOMAIN = "dev-2hnipz5fgv5putia.us.auth0.com"
+AUTH0_AUDIENCE = "https://dev-2hnipz5fgv5putia.us.auth0.com/api/v2/"
+
+require_auth = ResourceProtector()
+validator = utils.Auth0JWTBearerTokenValidator(
+    "dev-2hnipz5fgv5putia.us.auth0.com",
+    "https://dev-2hnipz5fgv5putia.us.auth0.com/api/v2/"
+)
+require_auth.register_token_validator(validator)
 
 
 
@@ -178,17 +197,84 @@ def verify_otp(request):
             print(profile_instance)
         return JsonResponse(api_call, safe=False)
     
+@csrf_exempt
+@api_view(('POST', 'GET',))
+def call_response(request):
+
+    if request.method == 'GET':
+        message = request.GET.get('message', 'Default message')
+
+        response = VoiceResponse()
+        response.say(message)
+
+        # response.gather()
+
+        with response.gather(numDigits=1, action='/process-input') as gather:
+            gather.say("Press 1 to confirm.")
+
+        # response.say("Let's do this, Press 1 to confirm")
+
+        print(response)
+
+        response.say("Have a Good Day!")
+
+        return HttpResponse(str(response), content_type='application/xml')
+        # return HttpResponse(response)
+
+
+@csrf_exempt
+def process_input(request):
+
+    digit_pressed = request.GET.get('Digits', None)
+    caller_id = request.GET.get('CallSid', None)
+
+    reminder = Reminder.objects.get(call_sid=caller_id)
+
+    response = VoiceResponse()
+
+    if digit_pressed == '1':
+        response.say("You pressed 1. Confirmation successful")
+        reminder.user_response = digit_pressed
+        reminder.save()
+        # response.say(caller_id)
+    else:
+        response.say("Invalid input.")
+
+    # if 'Digits' in request.values:
+
+    # response.say("Your pressed key is: " + digit_pressed)
+    # response.say(request.values['From'])
+        
+    # response.say("Your caller id is: " + caller_id)
+    response.say("Thankyou!")
+
+    return HttpResponse(str(response), content_type='application/xml')
+
+
+
 
 @csrf_exempt
 @api_view(('POST', 'GET',))
-def make_call(request):
+@require_auth(None)
+def make_reminder(request):
+
+    # url = "http://127.0.0.1:8000/api/callresponse"
+    url = "https://backend.bharatmenu.com/api/callresponse/?message=Hi"
 
     if request.method == 'GET':
         account_sid = "AC1027c48a892cea337d9d28fae752a186"
-        auth_token = "03d71a3f77be3664944155617656b233"
+        auth_token = "7dee7fd1aff03e05b31f2500d4f1183c"
         client = Client(account_sid, auth_token)
+
+        # response_text = "Hello, Ayush this is a TwiML response."
+        # twiml_response = f"""
+        #     <Response>
+        #         <Say>{response_text}</Say>
+        #     </Response>
+        # """
+
         call = client.calls.create(
-                                url='http://demo.twilio.com/docs/voice.xml',
+                                url=url,
                                 to='+919023389953',
                                 from_='+14152879886'
                             )
@@ -199,11 +285,10 @@ def make_call(request):
     if request.method == 'POST':
         # Assuming you receive timestamp and message in the request data
         reminder_data = JSONParser().parse(request)
-    
-        reminder_serializer = ReminderSerializer(data=reminder_data)
 
         print(reminder_data)
-
+    
+        reminder_serializer = ReminderSerializer(data=reminder_data)
 
         if reminder_serializer.is_valid():
             reminder = reminder_serializer.save()
@@ -848,3 +933,213 @@ def SaveFile(request):
     file_name = default_storage.save(file.name, file)
 
     return JsonResponse(file_name, safe=False)
+
+@csrf_exempt
+def api_exception_handler(exc, context=None):
+    response = exception_handler(exc, context=context)
+    if response and isinstance(response.data, dict):
+        response.data = {'message': response.data.get('detail', 'API Error')}
+    else:
+        response.data = {'message': 'API Error'}
+    return response
+
+# @permission_classes([IsAuthenticated])
+# @api_view(('GET', 'POST', 'PUT', 'DELETE'))
+# def authenticate_user(request):
+#     print("Endpoint hit")
+#     print(request)
+#     data = JSONParser().parse(request)
+#     token = request.headers.get('Authorization')
+#     print(data)
+#     print(token)
+
+#     # permission_classes = [IsAuthenticated]
+
+#     # print(permission_classes)
+
+#     return JsonResponse(data, safe=False) 
+
+
+# def get_token_auth_header(request):
+#     """Obtains the Access Token from the Authorization Header
+#     """
+#     auth = request.META.get("HTTP_AUTHORIZATION", None)
+#     parts = auth.split()
+#     token = parts[1]
+
+#     return token
+
+# def requires_scope(required_scope):
+#     """Determines if the required scope is present in the Access Token
+#     Args:
+#         required_scope (str): The scope required to access the resource
+#     """
+#     def require_scope(f):
+#         @wraps(f)
+#         def decorated(*args, **kwargs):
+#             token = get_token_auth_header(args[0])
+#             print(token)
+#             decoded = jwt.decode(token, verify=False)
+#             if decoded.get("scope"):
+#                 token_scopes = decoded["scope"].split()
+#                 for token_scope in token_scopes:
+#                     if token_scope == required_scope:
+#                         return f(*args, **kwargs)
+#             response = JsonResponse({'message': 'You don\'t have access to this resource'})
+#             response.status_code = 403
+#             return response
+#         return decorated
+#     return require_scope
+
+
+# @api_view(['GET'])
+# @permission_classes([AllowAny])
+# def public(request):
+#     return JsonResponse({'message': 'Hello from a public endpoint! You don\'t need to be authenticated to see this.'})
+
+# @api_view(['GET'])
+# def private(request):
+#     print("dasds")
+#     # data = JSONParser().parse(request)
+#     print(request)
+#     print(request.headers)
+#     return JsonResponse({'message': 'Hello from a private endpoint! You need to be authenticated to see this.'})
+
+# @api_view(['GET'])
+# @requires_scope('read:messages')
+# def private_scoped(request):
+#     # data = JSONParser().parse(request)
+#     print(request.data)
+#     print("sqsq")
+#     return JsonResponse({'message': 'Hello from a private endpoint! You need to be authenticated and have a scope of read:messages to see this.'})
+
+
+@csrf_exempt
+def public(request):
+    """No access token required to access this route
+    """
+    response = "Hello from a public endpoint! You don't need to be authenticated to see this."
+    return JsonResponse(dict(message=response))
+
+
+def getProfileId(auth):
+
+    url = 'https://dev-2hnipz5fgv5putia.us.auth0.com/userinfo'
+
+    resp = requests.get(url, headers={'Authorization': auth})
+
+    # print(resp.json().get('email'))
+
+    email = resp.json().get('email')
+    name = resp.json().get('name')
+
+    profile_instance = Profile.objects.get_or_create(email=email)
+    if profile_instance[0].fullName == "":
+        profile_instance[0].fullName = name
+    profile_instance[0].save()
+
+    # print(profile_instance)
+
+    id = profile_instance[0].ProfileId
+
+    return id
+
+
+
+@csrf_exempt
+@require_auth(None)
+def get_tasks(request):
+    """A valid access token is required to access this route
+    """
+
+    auth = request.headers.get('Authorization')
+
+    id = getProfileId(auth)
+
+    tasks_for_user = Task.objects.filter(profileId=id)
+
+    task_serializer = TaskSerializer(tasks_for_user, many=True)
+
+    return JsonResponse(task_serializer.data, safe=False)
+
+
+@csrf_exempt
+@api_view(('POST', 'GET',))
+@require_auth(None)
+def make_tasks(request):
+    """A valid access token is required to access this route
+    """
+
+    if request.method == 'POST':
+
+        auth = request.headers.get('Authorization')
+
+        id = getProfileId(auth)
+
+        task_data = JSONParser().parse(request)
+
+        # print(task_data)
+
+        task_data['profileId'] = id
+
+        # print(task_data)
+    
+        task = TaskSerializer(data=task_data)
+
+        if task.is_valid():
+            task.save()
+            return Response({'success': 'Task saved successfully'})
+        else:
+            return Response({'fail': 'Task saving failed'})
+
+
+        
+
+    return JsonResponse(task_serializer.data, safe=False)
+
+
+@csrf_exempt
+@require_auth(None)
+def get_reminders(request, id=0):
+    """A valid access token is required to access this route
+    """
+
+    # taskId = request.GET.get('taskId')
+
+    reminders_for_task = Reminder.objects.filter(taskId=id)
+
+    reminder_serializer = ReminderSerializer(reminders_for_task, many=True)
+
+    return JsonResponse(reminder_serializer.data, safe=False)
+
+
+@csrf_exempt
+@require_auth("read:messages")
+def private_scoped(request):
+    """A valid access token and an appropriate scope are required to access this route
+    """
+    response = "Hello from a private endpoint! You need to be authenticated and have a scope of read:messages to see this."
+    return JsonResponse(dict(message=response))
+
+
+#API's for habit app
+
+
+# @csrf_exempt
+# @require_auth(None)
+# def getTasks(request):
+#     """A valid access token is required to access this route
+#     """
+
+#     # print(request.headers)
+
+#     url = 'https://dev-2hnipz5fgv5putia.us.auth0.com/userinfo'
+
+#     #get user data from token 
+
+#     headers = {'Authorization': 'Bearer your_token'}
+
+
+
+#     response = "Hello from a private endpoint! You need to be authenticated to see this."
+#     return JsonResponse(dict(message=response))

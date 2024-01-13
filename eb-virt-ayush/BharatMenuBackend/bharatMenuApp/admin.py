@@ -11,6 +11,7 @@ from .models import Profile
 from .models import Merchant
 from .models import Query
 from .models import Reminder
+from .models import Task
 
 # Register your models here.
 
@@ -79,4 +80,5 @@ admin.site.register(Profile)
 admin.site.register(Merchant)
 admin.site.register(Query)
 admin.site.register(Reminder)
+admin.site.register(Task)
 # admin.site.register(MenuItem, MenuItemAdmin)

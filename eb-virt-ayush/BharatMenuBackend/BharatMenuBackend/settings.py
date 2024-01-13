@@ -49,6 +49,9 @@ DEBUG = True
 ALLOWED_HOSTS = [
     'django-bharatmenuapp.eba-qq64mtbt.us-west-2.elasticbeanstalk.com', '127.0.0.1', 'bharatmenu.com', 'backend.bharatmenu.com', '1.0.0.127.in-addr.arpa', 'localhost:19006', 'localhost:19003', '10.0.2.2', '127.0.0.1:8000', '44.236.186.114']
 
+# ALLOWED_HOSTS = ['*']
+
+CSRF_TRUSTED_ORIGINS = ['http://localhost:5173']
 
 try:
     internal_ip = requests.get('http://169.254.169.254/latest/meta-data/').text
@@ -83,11 +86,47 @@ REST_FRAMEWORK = {
         # 'rest_framework.authentication.BasicAuthentication',
         # 'rest_framework.authentication.SessionAuthentication',
         'knox.auth.TokenAuthentication',
-    ]
+        'rest_framework_simplejwt.authentication.JWTAuthentication',
+        'rest_framework_simplejwt.authentication.JWTTokenUserAuthentication',
+        'rest_framework_jwt.authentication.JSONWebTokenAuthentication',
+        'rest_framework.authentication.SessionAuthentication',
+        'rest_framework.authentication.BasicAuthentication',
+    ],
 }
 
-CORS_ORIGIN_ALLOW_ALL = True
 
+# JWT
+
+# AUTH0_DOMAIN = "127.0.0.1:8000"
+# AUTH0_AUDIENCE = "https://dev-2hnipz5fgv5putia.us.auth0.com/api/v2/"
+
+# SIMPLE_JWT = {
+#     'ALGORITHM': 'RS256',
+#     'JWK_URL': f'http://{AUTH0_DOMAIN}/.well-known/jwks.json',
+#     'AUDIENCE': AUTH0_AUDIENCE,
+#     'ISSUER': f'http://{AUTH0_DOMAIN}/',
+#     'USER_ID_CLAIM': 'sub',
+#     'AUTH_TOKEN_CLASSES': ('authz.tokens.Auth0Token',),
+# }
+
+# JWT_AUTH = {
+#     'JWT_PAYLOAD_GET_USERNAME_HANDLER':
+#         'bharatMenuApp.utils.jwt_get_username_from_payload_handler',
+#     'JWT_DECODE_HANDLER':
+#         'bharatMenuApp.utils.jwt_decode_token',
+#     'JWT_ALGORITHM': 'RS256',
+#     'JWT_AUDIENCE': '{AUTH0_AUDIENCE}',
+#     'JWT_ISSUER': 'http://{AUTH0_DOMAIN}/',
+#     'JWT_AUTH_HEADER_PREFIX': 'Bearer',
+# }
+
+CORS_ORIGIN_ALLOW_ALL = False
+
+CORS_ALLOWED_ORIGINS = [
+    "http://localhost:5173",
+    "http://127.0.0.1:5173"
+]
+ 
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
@@ -95,8 +134,14 @@ MIDDLEWARE = [
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'django.contrib.auth.middleware.RemoteUserMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+]
+
+AUTHENTICATION_BACKENDS = [
+    'django.contrib.auth.backends.ModelBackend',
+    'django.contrib.auth.backends.RemoteUserBackend',
 ]
 
 ROOT_URLCONF = 'BharatMenuBackend.urls'
@@ -185,32 +230,33 @@ if 'AWS_STORAGE_BUCKET_NAME' in os.environ:
     AWS_S3_ACCESS_KEY_ID = os.environ['AWS_ACCESS_KEY_ID']
     AWS_S3_SECRET_ACCESS_KEY = os.environ['AWS_SECRET_ACCESS_KEY']
 
+    CELERY_accept_content = ['application/json'] 
+    CELERY_task_serializer = 'json' 
+
+    CELERY_TASK_DEFAULT_QUEUE = 'Reminders' 
+    CELERY_BROKER_URL = "sqs://" + os.environ['AWS_ACCESS_KEY_ID'] + ":" + os.environ['AWS_SECRET_ACCESS_KEY'] + "@"
+    CELERY_BROKER_TRANSPORT_OPTIONS = { 
+        "region": "us-west-2", 
+        'predefined_queues': {
+            'Reminders': {
+                'url': 'https://sqs.us-west-2.amazonaws.com/072650463999/Reminders',
+                'access_key_id': os.environ['AWS_ACCESS_KEY_ID'],
+                'secret_access_key': os.environ['AWS_SECRET_ACCESS_KEY'],
+            }
+        }
+    } 
+    CELERY_RESULT_BACKEND = None
+
+else:
+    # your_project/settings.py
+    CELERY_BROKER_URL = 'redis://127.0.0.1:6379/0'
+
+    # your_project/settings.py
+    CELERY_RESULT_BACKEND = 'redis://127.0.0.1:6379/0'
+
 
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/4.1/howto/static-files/
-
-CELERY_accept_content = ['application/json'] 
-CELERY_task_serializer = 'json' 
-
-# your_project/settings.py
-# CELERY_BROKER_URL = 'redis://127.0.0.1:6379/0'
-
-# your_project/settings.py
-# CELERY_RESULT_BACKEND = 'redis://127.0.0.1:6379/0'
-
-CELERY_TASK_DEFAULT_QUEUE = 'Reminders' 
-CELERY_BROKER_URL = "sqs://" + os.environ['AWS_ACCESS_KEY_ID'] + ":" + os.environ['AWS_SECRET_ACCESS_KEY'] + "@"
-CELERY_BROKER_TRANSPORT_OPTIONS = { 
-    "region": "us-west-2", 
-    'predefined_queues': {
-        'Reminders': {
-            'url': 'https://sqs.us-west-2.amazonaws.com/072650463999/Reminders',
-            'access_key_id': os.environ['AWS_ACCESS_KEY_ID'],
-            'secret_access_key': os.environ['AWS_SECRET_ACCESS_KEY'],
-        }
-    }
-} 
-CELERY_RESULT_BACKEND = None
 
 # if 'AWS_STORAGE_BUCKET_NAME' in os.environ:
 

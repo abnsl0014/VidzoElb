@@ -31,11 +31,14 @@ urlpatterns = [
     re_path(r'api/register/', views.RegisterAPI.as_view(), name='register'),
     re_path(r'api/script/', views.get_ai_script, name='script'),
     re_path(r'api/login/', views.LoginAPI.as_view(), name='login'),
+    # re_path(r'api/auth/', views.authenticate_user, name='auth'),
     re_path(r'api/user/', views.get_user_data, name='user'),
     re_path(r'api/merchant/', views.getMerchant, name='merchant'),
     re_path(r'api/otp/', views.get_otp, name='otp'),
     re_path(r'api/verifyotp/', views.verify_otp, name='verifyotp'),
-    re_path(r'api/call/', views.make_call, name='call'),
+    re_path(r'api/callresponse/$', views.call_response, name='callresponse'),
+    re_path(r'api/callresponse/process-input/$', views.process_input, name='process-input'),
+    re_path(r'process-input/', views.process_input, name='process-input'),
     re_path(r'api/video$', views.getAvatarVideo, name='video'),
     re_path(r'api/video/([0-9]+)/$', views.getAvatarVideo, name='video'),
     re_path(r'api/adimage/', views.getAdImage, name='adimage'),
@@ -45,7 +48,19 @@ urlpatterns = [
     re_path(r'api/logout/', knox_views.LogoutView.as_view(), name='logout'),
     re_path(r'api/logoutall/', knox_views.LogoutAllView.as_view(), name='logoutall'),
 
-    re_path(r'^menuItem/SaveFile$', views.SaveFile)
+    re_path(r'^menuItem/SaveFile$', views.SaveFile),
+
+    #Habitly
+
+    re_path(r'api/get_reminders/([0-9]+)/$', views.get_reminders),
+    re_path(r'api/get-tasks', views.get_tasks),
+    re_path(r'api/make-reminder/', views.make_reminder, name='make-reminder'),
+    re_path(r'api/make-tasks/', views.make_tasks, name='make-tasks'),
+
+
+    re_path(r'api/public', views.public),
+    
+    re_path(r'api/private-scoped', views.private_scoped),
 
 
 

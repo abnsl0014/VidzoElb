@@ -1,7 +1,7 @@
 from django.http import HttpResponse
 from rest_framework import serializers
 # from django.core import serializers as core_serializers
-from bharatMenuApp.models import City, Restaurant, MenuItem, Category, Order, OrderItems, Merchant, Profile, Query, Reminder
+from bharatMenuApp.models import City, Restaurant, MenuItem, Category, Order, OrderItems, Merchant, Profile, Query, Reminder, Task
 from django.contrib.auth.models import User
 from datetime import datetime
 
@@ -15,6 +15,11 @@ class ReminderSerializer(serializers.Serializer):
     phone_number = serializers.CharField(max_length=15)
     message = serializers.CharField()
     reminder_time = serializers.DateTimeField()
+    taskId = serializers.IntegerField()
+
+    class Meta:
+        model = Reminder
+        fields = '__all__'
 
     def to_representation(self, instance):
         ret = super().to_representation(instance)
@@ -27,7 +32,16 @@ class ReminderSerializer(serializers.Serializer):
     
     def create(self, validated_data):
         # Implement the logic to create a Reminder instance using the validated data
-        return Reminder.objects.create(**validated_data)
+        # print("Validated Data:", validated_data)
+        task_id = validated_data.pop('taskId')
+
+        # print(task_id)
+
+        if task_id:
+            task_instance = Task.objects.get(id=task_id)
+            return Reminder.objects.create(**validated_data, taskId=task_instance)
+        else:
+            return Reminder.objects.create(**validated_data)
 
 
 class RestaurantSerializer(serializers.ModelSerializer):
@@ -232,3 +246,28 @@ class QuerySerializerReadOnly(serializers.ModelSerializer):
     class Meta:
         model = Query
         fields = '__all__'
+
+
+class TaskSerializer(serializers.ModelSerializer):
+    profileId = serializers.IntegerField()
+    
+    class Meta:
+        model = Task
+        fields = '__all__'
+
+
+    def create(self, validated_data):
+
+        print(validated_data)
+
+        profile_instance = Profile.objects.get(
+            ProfileId=validated_data['profileId'])
+
+        validated_data.pop('profileId')
+
+        task_instance = Task.objects.create(
+            **validated_data,
+            profileId=profile_instance
+        )
+
+        return task_instance

@@ -127,6 +127,17 @@ class Profile(models.Model):
     email = models.EmailField(default="")
     Note = models.CharField(max_length=350, default="")
 
+    class SubscriptionStatusTypes(models.TextChoices):
+        BASIC = "1", "BASIC"
+        PLUS = "2", "PLUS"
+        PRO = '3', "PRO"
+
+    SubscriptionStatus = models.CharField(
+        max_length=1,
+        choices=SubscriptionStatusTypes.choices,
+        default=SubscriptionStatusTypes.BASIC
+    )
+
     def __int__(self):
         return self.ProfileId
 
@@ -267,12 +278,39 @@ class Merchant(models.Model):
 
     def __str__(self):
         return self.ShopName
+    
+class Task(models.Model):
+    id = models.AutoField(primary_key=True)
+    profileId = models.ForeignKey(
+        'Profile', on_delete=models.CASCADE, default=None)
+    taskName = models.CharField(max_length=50, default="")
+    description = models.CharField(max_length=100, default="")
+
+    def __int__(self):
+        return self.id
 
 class Reminder(models.Model):
     id = models.AutoField(primary_key=True)
     phone_number = models.CharField(max_length=15)
     message = models.TextField(default="")
     reminder_time = models.DateTimeField(default=None)
+    call_sid = models.CharField(default="", max_length=50)
+    user_response = models.CharField(default="0", max_length=50)
+    taskId = models.ForeignKey(
+        'Task', on_delete=models.CASCADE, null=True, blank=True)
+
+    class StatusTypes(models.TextChoices):
+        NOT_STARTED = "1", "NOT_STARTED"
+        IN_PROCESS = "2", "IN_PROCESS"
+        DISCARDED = '3', "DISCARDED"
+        DONE = '4', "DONE"
+
+    status = models.CharField(
+        max_length=4,
+        choices=StatusTypes.choices,
+        default=StatusTypes.NOT_STARTED
+    )
 
     def __int__(self):
         return self.id
+    
