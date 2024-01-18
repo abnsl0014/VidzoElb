@@ -271,3 +271,9 @@ class TaskSerializer(serializers.ModelSerializer):
         )
 
         return task_instance
+    
+class TaskSerializerReadOnly(serializers.ModelSerializer):
+        
+    class Meta:
+        model = Task
+        fields = '__all__'

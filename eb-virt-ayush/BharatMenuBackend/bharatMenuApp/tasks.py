@@ -22,8 +22,8 @@ def send_reminder(reminder_id):
 
         url = f"http://backend.bharatmenu.com/api/callresponse/?message={encoded_message}"
 
-        account_sid = "AC1027c48a892cea337d9d28fae752a186"
-        auth_token = "7dee7fd1aff03e05b31f2500d4f1183c"
+        account_sid = ""
+        auth_token = ""
         client = Client(account_sid, auth_token)
 
         call = client.calls.create(

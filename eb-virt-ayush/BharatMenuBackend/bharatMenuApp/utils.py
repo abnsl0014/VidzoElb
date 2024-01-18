@@ -12,11 +12,11 @@ class Auth0JWTBearerTokenValidator(JWTBearerTokenValidator):
 
         # print(f"{issuer}.well-known/jwks.json")
 
-        response = requests.get(f"{issuer}.well-known/jwks.json")
+        # response = requests.get(f"{issuer}.well-known/jwks.json")
 
         # print(response.text)
 
-        # jsonurl = urlopen(f"{issuer}.well-known/jwks.json")
+        jsonurl = urlopen(f"{issuer}.well-known/jwks.json")
 
         # print(jsonurl.read())
 
@@ -24,7 +24,7 @@ class Auth0JWTBearerTokenValidator(JWTBearerTokenValidator):
 
         # print(json.loads(jsonurl.read()))
         public_key = JsonWebKey.import_key_set(
-            json.loads(response.text)
+            json.loads(jsonurl.read())
         )
         super(Auth0JWTBearerTokenValidator, self).__init__(
             public_key

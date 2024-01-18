@@ -53,9 +53,13 @@ urlpatterns = [
     #Habitly
 
     re_path(r'api/get_reminders/([0-9]+)/$', views.get_reminders),
-    re_path(r'api/get-tasks', views.get_tasks),
+    re_path(r'api/get-tasks$', views.get_tasks),
+    re_path(r'api/get-tasks/([0-9]+)/$', views.get_tasks),
     re_path(r'api/make-reminder/', views.make_reminder, name='make-reminder'),
     re_path(r'api/make-tasks/', views.make_tasks, name='make-tasks'),
+    re_path(r'api/delete-tasks/([0-9]+)$', views.delete_tasks, name='delete-tasks'),
+    re_path(r'api/update-tasks/([0-9]+)$', views.update_tasks, name='update-tasks'),
+    
 
 
     re_path(r'api/public', views.public),

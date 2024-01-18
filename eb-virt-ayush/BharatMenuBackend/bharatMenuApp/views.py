@@ -8,7 +8,7 @@ import openai
 import requests
 from django.http import HttpResponse
 from django.core.files.storage import default_storage
-from bharatMenuApp.serializers import CitySerializer, RestaurantSerializer, MenuItemSerializer, CategorySerializer, OrderSerializer, OrderItemsSerializer, RegisterSerializer, MerchantSerializer, ProfileSerializer, QuerySerializer, QuerySerializerReadOnly, ReminderSerializer, TaskSerializer
+from bharatMenuApp.serializers import CitySerializer, RestaurantSerializer, MenuItemSerializer, CategorySerializer, OrderSerializer, OrderItemsSerializer, RegisterSerializer, MerchantSerializer, ProfileSerializer, QuerySerializer, QuerySerializerReadOnly, ReminderSerializer, TaskSerializer, TaskSerializerReadOnly
 from bharatMenuApp.models import City, Restaurant, MenuItem, Category, Order, OrderItems, Merchant, Profile, Query, Reminder, Task
 from unicodedata import category
 from django import forms
@@ -255,7 +255,6 @@ def process_input(request):
 
 @csrf_exempt
 @api_view(('POST', 'GET',))
-@require_auth(None)
 def make_reminder(request):
 
     # url = "http://127.0.0.1:8000/api/callresponse"
@@ -287,16 +286,24 @@ def make_reminder(request):
         reminder_data = JSONParser().parse(request)
 
         print(reminder_data)
-    
-        reminder_serializer = ReminderSerializer(data=reminder_data)
 
-        if reminder_serializer.is_valid():
-            reminder = reminder_serializer.save()
-            # Schedule the reminder immediately
-            send_reminder.apply_async(args=[reminder.id], eta=reminder.reminder_time)
-            return Response({'success': 'Reminder scheduled successfully'})
+        auth = request.headers.get('Authorization')
+
+        id = getProfileId(auth, True)
+
+        if id != -1:
+            reminder_serializer = ReminderSerializer(data=reminder_data)
+
+            if reminder_serializer.is_valid():
+                reminder = reminder_serializer.save()
+                # Schedule the reminder immediately
+                send_reminder.apply_async(args=[reminder.id], eta=reminder.reminder_time)
+                
+                return JsonResponse(reminder_serializer.data, safe=False)
+            else:
+                return Response({'fail': 'Reminder scheduled failed'})
         else:
-            return Response({'fail': 'Reminder scheduled failed'})
+            return Response({'Auth fail or Invalid User': 'Reminder scheduled failed'}) 
 
 
 @csrf_exempt
@@ -1022,59 +1029,140 @@ def public(request):
     return JsonResponse(dict(message=response))
 
 
-def getProfileId(auth):
+def getProfileId(auth, post=False):
 
     url = 'https://dev-2hnipz5fgv5putia.us.auth0.com/userinfo'
 
-    resp = requests.get(url, headers={'Authorization': auth})
+    if post:
 
-    # print(resp.json().get('email'))
+        parts = auth.split()
+        if len(parts) == 2 and parts[0].lower() == 'jwt':
+            token = parts[1]
+            print("Token:", token)
 
-    email = resp.json().get('email')
-    name = resp.json().get('name')
+        resp = requests.get(url, headers={'Authorization': 'Bearer ' + token})
+    else:
+        resp = requests.get(url, headers={'Authorization': auth})
 
-    profile_instance = Profile.objects.get_or_create(email=email)
-    if profile_instance[0].fullName == "":
-        profile_instance[0].fullName = name
-    profile_instance[0].save()
+    print(resp)
+    print(auth)
 
-    # print(profile_instance)
+    if resp.status_code == 200:
 
-    id = profile_instance[0].ProfileId
+        print(resp.json().get('email'))
 
-    return id
+        email = resp.json().get('email')
+        name = resp.json().get('name')
+
+        profile_instance = Profile.objects.get_or_create(email=email)
+        if profile_instance[0].fullName == "":
+            profile_instance[0].fullName = name
+        profile_instance[0].save()
+
+        # print(profile_instance)
+
+        id = profile_instance[0].ProfileId
+
+        return id
+    else:
+        return -1
 
 
 
 @csrf_exempt
 @require_auth(None)
-def get_tasks(request):
+def get_tasks(request, id=0):
     """A valid access token is required to access this route
     """
 
     auth = request.headers.get('Authorization')
 
-    id = getProfileId(auth)
+    profId = getProfileId(auth)
 
-    tasks_for_user = Task.objects.filter(profileId=id)
+    if profId != -1:
 
-    task_serializer = TaskSerializer(tasks_for_user, many=True)
+        print(id)
 
-    return JsonResponse(task_serializer.data, safe=False)
+        if id != 0:
+            user_task = Task.objects.get(id=id)
+
+            task_serializer = TaskSerializer(user_task)
+
+            return JsonResponse(task_serializer.data, safe=False)
+            
+        else:
+            tasks_for_user = Task.objects.filter(profileId=profId)
+
+            task_serializer = TaskSerializer(tasks_for_user, many=True)
+
+            return JsonResponse(task_serializer.data, safe=False)
+    else:
+        return JsonResponse("Invalid auth token or user details", safe=False)
+    
+
+@csrf_exempt
+@require_auth(None)
+def delete_tasks(request, id=0):
+    """A valid access token is required to access this route
+    """
+
+    if request.method == 'DELETE': 
+        
+        auth = request.headers.get('Authorization')
+
+        profId = getProfileId(auth)
+
+        if profId != -1:
+            user_task = Task.objects.get(id=id)
+            user_task.delete()
+
+            return JsonResponse("Deleted Successfully", safe=False)
+        else:
+            return JsonResponse("Invalid auth token or user details", safe=False)
+        
+
+@csrf_exempt
+@require_auth(None)
+def update_tasks(request, id=0):
+    """A valid access token is required to access this route
+    """
+
+    if request.method == 'PUT': 
+        
+        auth = request.headers.get('Authorization')
+
+        profId = getProfileId(auth)
+
+        task_data = JSONParser().parse(request)
+
+        if profId != -1:
+            user_task = Task.objects.get(id=id)
+            task_serializer = TaskSerializerReadOnly(user_task, data=task_data)
+            if task_serializer.is_valid():
+                task_serializer.save()
+                return JsonResponse("Updated Successfully!!", safe=False)
+            return JsonResponse("Failed to Update.", safe=False)
+        else:
+            return JsonResponse("Invalid auth token or user details", safe=False)
+
+
 
 
 @csrf_exempt
 @api_view(('POST', 'GET',))
-@require_auth(None)
 def make_tasks(request):
     """A valid access token is required to access this route
     """
 
-    if request.method == 'POST':
+    # if request.method == 'POST':
 
-        auth = request.headers.get('Authorization')
+    auth = request.headers.get('Authorization')
 
-        id = getProfileId(auth)
+    id = getProfileId(auth, True)
+
+    print(id)
+
+    if id != -1:
 
         task_data = JSONParser().parse(request)
 
@@ -1088,14 +1176,11 @@ def make_tasks(request):
 
         if task.is_valid():
             task.save()
-            return Response({'success': 'Task saved successfully'})
+            return JsonResponse(task.data, safe=False)
         else:
             return Response({'fail': 'Task saving failed'})
-
-
-        
-
-    return JsonResponse(task_serializer.data, safe=False)
+    else:
+        return JsonResponse("Invalid auth token or user details", safe=False)
 
 
 @csrf_exempt
